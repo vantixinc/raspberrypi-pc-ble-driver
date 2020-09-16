@@ -1,0 +1,84 @@
+FROM arm32v7/ubuntu:18.04
+
+COPY qemu-arm-static /usr/bin/qemu-arm-static
+
+# Install all needed package for build a python package
+RUN apt-get update && apt-get install -y locales software-properties-common && \
+    localedef -i en_US -c -f UTF-8 -A /usr/share/locale/locale.alias en_US.U
+
+RUN echo '\n' | add-apt-repository ppa:deadsnakes/ppa
+
+RUN apt-get update && apt-get install -y python3.7
+
+RUN apt-get install -y python3-dev bluez python3-pip libglib2.0-dev
+
+# Install package for cmake, if libssl-dev is not installed, cmake will raise an error about protocol when download something
+RUN apt-get install -y build-essential libffi-dev libssl-dev
+
+# Upgrade pip newest version
+RUN python3.7 -m pip install --upgrade pip
+
+# Install cmake 3.10.2
+RUN apt-get install -y cmake
+
+# Install cmake for python to build vcpkg and build python package
+RUN python3.7 -m pip install scikit-build==0.11.0
+RUN python3.7 -m pip install cmake==3.14.4.post1
+
+# Install vcpkg for setup pc_ble_drive 0.14.2 from source
+RUN apt-get install -y git wget curl zip unzip
+RUN apt-get install -y ninja-build
+RUN git clone https://github.com/microsoft/vcpkg
+# RUN cd ../vcpkg && \
+#     git checkout 2020.07
+RUN cd /vcpkg && ./bootstrap-vcpkg.sh -useSystemBinaries
+
+ENV VCPKG_FORCE_SYSTEM_BINARIES=1
+
+# Install neccessary package for nrf-ble-driver
+RUN apt-get install -y libudev-dev
+
+# Install nrf-ble-driver via vcpkg
+RUN /vcpkg/vcpkg install nrf-ble-driver --triplet arm-linux
+
+# Install pc_ble_driver_py from source
+RUN apt-get install -y swig
+RUN python3.7 -m pip install setuptools wheel tox
+RUN python3.7 -m pip install ninja==1.9.0
+
+RUN git clone https://github.com/NordicSemiconductor/pc-ble-driver-py.git
+
+ENV CMAKE_PREFIX_PATH=/vcpkg/installed/arm-linux/share/nrf-ble-driver
+
+RUN python3.7 -m pip install wrapt==1.12.1
+
+RUN apt-get -y install libpython3.7-dev
+
+RUN cd /pc-ble-driver-py && git checkout v0.14.2 && python3.7 setup.py build
+RUN cd /pc-ble-driver-py && python3.7 setup.py install
+
+RUN python3.7 -m pip install nrfutil==6.1.0
+
+RUN python3.7 -m pip install cython
+
+RUN python3.7 -m pip install numpy==1.16.2
+
+RUN python3.7 -m pip install six==1.15.0 \
+    multiprocessing_logging==0.3.1 \
+    Twisted==20.3.0 \
+    pandas==1.0.5 \
+    txdbus==1.1.1 \
+    bleak==0.7.1 \
+    azure-iot-device==2.1.3 \
+    marshmallow==3.6.1 \
+    pytz==2019.3 \
+    pyserial==3.4 \
+    packaging==19.2
+
+RUN apt-get install -y llvm-10
+
+ENV LLVM_CONFIG=/usr/lib/llvm-10/bin/llvm-config
+
+RUN python3.7 -m pip install fastparquet==0.3.2
+
+CMD [ "python3.7" ]
